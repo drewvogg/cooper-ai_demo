@@ -49,7 +49,6 @@ BLOCKING_FIELDS = {
 RECOMMENDED_FIELDS = {
     "annual_revenue": "Annual revenue",
     "employee_count": "Employee count",
-    "years_in_business": "Years in business",
     "prior_carrier": "Prior carrier",
     "prior_policy_number": "Prior policy number",
     "prior_policy_expiration": "Prior policy expiration",
@@ -73,11 +72,9 @@ LINE_FIELD_TRIGGERS = {
 
 DISPLAY_FIELDS = [
     ("named_insured", "Named Insured"),
-    ("dba", "DBA"),
     ("entity_type", "Entity Type"),
     ("fein", "FEIN"),
     ("naics", "NAICS"),
-    ("years_in_business", "Years in Business"),
     ("annual_revenue", "Annual Revenue"),
     ("employee_count", "Employee Count"),
     ("website", "Website"),
@@ -92,7 +89,6 @@ COVERAGE_FIELDS = [
 ]
 
 OPTIONAL_FIELDS = {
-    "dba": "DBA",
     "llc_member_manager_count": "LLC member / manager count",
     "website": "Website",
     "transaction_type": "Transaction type",
