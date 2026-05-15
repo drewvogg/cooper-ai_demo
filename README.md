@@ -1,5 +1,4 @@
-# ACORDingly
-## Cooper AI Sales Engineer Demo
+# ACORDingly - Cooper AI Sales Engineer Demo
 
 ACORDingly is a small deterministic Claude Skill MVP for a mid-market commercial P&C brokerage. It ingests an AMS-style CSV export for one or more accounts and produces one output package per account/carrier combination:
 
