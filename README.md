@@ -6,6 +6,8 @@ ACORDingly is a small deterministic Claude Skill MVP for a mid-market commercial
 - a markdown review report showing missing blocking and recommended fields
 - a JSON payload that can feed a production official-form renderer
 
+The official ACORD 125 template is not committed because it is a licensed document. For the official-template demo, provide the PDF locally at `templates/Acord125_Template.pdf` or pass its path with `--template`.
+
 The goal is not to replace producer/CSR review. The goal is to remove the first pass of repetitive re-keying and make the review work explicit.
 
 ## Suggested Demo Flow
@@ -14,7 +16,7 @@ The goal is not to replace producer/CSR review. The goal is to remove the first 
 2. Open the generated carrier-specific folder and show the filled PDF, review report, and JSON payload.
 3. Run the Birchwood Hospitality example to show how the skill handles missing blocking data.
 4. Open Birchwood's review report and point out that the form is generated, but the package is not marked ready because FEIN is missing.
-5. If an official ACORD template is available locally, rerun Acme with `--template` to show the same normalized payload filling a real AcroForm PDF.
+5. Add the licensed ACORD template locally and use `--template templates/Acord125_Template.pdf` to show the same normalized payload filling a real AcroForm PDF.
 
 ## Demo Command
 
@@ -24,31 +26,33 @@ Install dependencies:
 python3 -m pip install -r requirements.txt
 ```
 
-Generate the Acme Mechanical example:
+Generate the Acme Mechanical example with a locally supplied official ACORD template:
 
 ```bash
 python3 scripts/fill_acord125.py \
   --input-dir sample_inputs/acme_mechanical \
+  --template templates/Acord125_Template.pdf \
   --out outputs/demo
 ```
 
-Generate the Birchwood Hospitality example, which intentionally has a missing blocking field:
+Generate the Birchwood Hospitality example with a locally supplied official ACORD template:
 
 ```bash
 python3 scripts/fill_acord125.py \
   --input-dir sample_inputs/birchwood_hospitality \
+  --template templates/Acord125_Template.pdf \
   --out outputs/demo
 ```
 
 The Birchwood sample intentionally omits FEIN to demonstrate how the skill flags blocking missing fields while still generating a draft package for review.
 
-If you have a fillable ACORD 125 PDF template locally, generate official filled drafts as well:
+To generate a generic pre-market draft without carrier/program metadata, pass the account CSV directly and omit `--markets`:
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --input-dir sample_inputs/acme_mechanical \
-  --template ../Acord125_Template.pdf \
-  --out outputs/demo
+  --csv sample_inputs/acme_mechanical/ams_export.csv \
+  --template templates/Acord125_Template.pdf \
+  --out outputs/generic
 ```
 
 When `--template` is supplied, the CLI prints a short verification summary for the highest-value official ACORD fields, including completion date, website, prior carrier, repeated customer IDs, transaction status, policy dates, business type, operations, attachment indicators, umbrella, and premium fields.
@@ -64,7 +68,7 @@ You can also pass files directly:
 python3 scripts/fill_acord125.py \
   --csv sample_inputs/acme_mechanical/ams_export.csv \
   --markets sample_inputs/acme_mechanical/target_markets.csv \
-  --template ../Acord125_Template.pdf \
+  --template templates/Acord125_Template.pdf \
   --out outputs/demo
 ```
 

@@ -1,11 +1,11 @@
 ---
-name: accordingly
-description: Fill an ACORD 125-style commercial application draft from a structured AMS CSV export.
+name: ACORDingly
+description: Fill an ACORD 125 commercial application draft from structured AMS CSV exports.
 ---
 
-# Accordingly
+# ACORDingly
 
-Use this skill when a user uploads or points to an AMS-style CSV export for a commercial P&C account and asks for a filled insurance application draft.
+Use this skill when a user uploads or points to an AMS-style CSV export for a commercial P&C account and asks for a filled insurance application draft. The repo includes sample inputs and the Python workflow. The official ACORD 125 PDF template is licensed and must be supplied separately, usually at `templates/Acord125_Template.pdf`.
 
 ## What This Skill Does
 
@@ -15,7 +15,7 @@ This MVP handles one deterministic path:
 2. Select one account row or process every row.
 3. Validate required and recommended fields for an ACORD 125-style commercial application draft.
 4. Generate a filled PDF draft, a markdown review report, and a machine-readable JSON payload.
-5. Optionally fill a real ACORD 125 AcroForm template if the user supplies one.
+5. Fill a locally supplied ACORD 125 AcroForm template when `--template` is supplied.
 
 The generated application is a human-reviewable draft. It is not automatically submitted to a carrier or market.
 
@@ -23,6 +23,7 @@ The generated application is a human-reviewable draft. It is not automatically s
 
 Expected account CSV columns are shown in `sample_inputs/acme_mechanical/ams_export.csv`.
 Each example folder can also include `target_markets.csv` to generate carrier-specific ACORD copies.
+The official PDF template is not committed. Before running the official-template demo, place the licensed PDF at `templates/Acord125_Template.pdf` or use the uploaded file path in the `--template` argument.
 
 The important fields include:
 
@@ -42,26 +43,38 @@ The important fields include:
 From the repository root, run:
 
 ```bash
+python3 -m pip install -r requirements.txt
+```
+
+If the ACORD template was uploaded separately, either place it at `templates/Acord125_Template.pdf` or substitute the uploaded file path anywhere the commands below use `--template`.
+
+To generate complete carrier-specific official ACORD outputs for Acme:
+
+```bash
 python3 scripts/fill_acord125.py \
   --input-dir sample_inputs/acme_mechanical \
+  --template templates/Acord125_Template.pdf \
   --out outputs/demo
 ```
 
-To run the incomplete-data review scenario:
+To run the incomplete-data review scenario for Birchwood:
 
 ```bash
 python3 scripts/fill_acord125.py \
   --input-dir sample_inputs/birchwood_hospitality \
+  --template templates/Acord125_Template.pdf \
   --out outputs/demo
 ```
 
-If a fillable ACORD 125 template is available locally, pass it with `--template`:
+Birchwood intentionally omits FEIN. The skill should still generate the PDF package, but the review report should mark the account as not ready because a blocking field is missing.
+
+To generate a generic pre-market ACORD draft without carrier/program fields, pass the account CSV directly and omit `--markets`:
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --input-dir sample_inputs/acme_mechanical \
-  --template ../Acord125_Template.pdf \
-  --out outputs/demo
+  --csv sample_inputs/acme_mechanical/ams_export.csv \
+  --template templates/Acord125_Template.pdf \
+  --out outputs/generic
 ```
 
 When filling an official template, review the printed verification summary to confirm the target fields landed in the AcroForm.
@@ -72,7 +85,7 @@ To override the folder convention, pass explicit paths:
 python3 scripts/fill_acord125.py \
   --csv sample_inputs/acme_mechanical/ams_export.csv \
   --markets sample_inputs/acme_mechanical/target_markets.csv \
-  --template ../Acord125_Template.pdf \
+  --template templates/Acord125_Template.pdf \
   --out outputs/demo
 ```
 
@@ -84,6 +97,14 @@ For each account/carrier combination, the script writes one folder named from th
 - `application_draft.pdf`: fallback ACORD 125-style draft application when no template is supplied
 - `review_report.md`: missing-field report for CSR/producer review
 - `form_payload.json`: normalized account data, validation state, and candidate AcroForm field values for a production PDF filler
+
+For the standard demo, inspect:
+
+- `outputs/demo/acme-001-acme-mechanical-llc-trv-glprop/`
+- `outputs/demo/acme-001-acme-mechanical-llc-hart-cpkg/`
+- `outputs/demo/acme-001-acme-mechanical-llc-lib-umbrella/`
+- `outputs/demo/brch-002-birchwood-hospitality-group-inc-hart-hotel/`
+- `outputs/demo/brch-002-birchwood-hospitality-group-inc-amwins-hosp/`
 
 ## Operating Rules
 

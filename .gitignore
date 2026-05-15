@@ -56,6 +56,9 @@ cover/
 outputs/*
 !outputs/.gitkeep
 
+# Licensed templates should be supplied locally, not committed.
+templates/*.pdf
+
 # Translations
 *.mo
 *.pot
