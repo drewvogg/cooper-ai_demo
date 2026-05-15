@@ -14,7 +14,7 @@ This MVP handles one deterministic path:
 1. Read a structured AMS CSV export.
 2. Select one account row or process every row.
 3. Validate required and recommended fields for an ACORD 125-style commercial application draft.
-4. Generate a filled PDF draft and a markdown review report.
+4. Generate a filled PDF draft, a markdown review report, and a machine-readable JSON payload.
 
 The generated application is a human-reviewable draft. It is not automatically submitted to a carrier or market.
 
@@ -60,12 +60,14 @@ For each account, the script writes:
 
 - `*_application_draft.pdf`: filled ACORD 125-style draft application
 - `*_review_report.md`: missing-field report for CSR/producer review
+- `*_form_payload.json`: normalized account data, validation state, and candidate AcroForm field values for a production PDF filler
 
 ## Operating Rules
 
 - Do not infer missing account facts.
 - Do not mark an application ready if any blocking field is missing.
 - Treat the PDF as a draft for human review.
+- Treat the JSON payload as the integration contract for downstream official-form rendering.
 - If the CSV has unrecognized fields, preserve the existing workflow and only map fields explicitly supported by the script.
 
 ## Future Hybrid Extension

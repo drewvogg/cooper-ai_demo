@@ -4,6 +4,7 @@ Accordingly is a small deterministic Claude Skill MVP for a mid-market commercia
 
 - a filled ACORD 125-style commercial application draft PDF
 - a markdown review report showing missing blocking and recommended fields
+- a JSON payload that can feed a production official-form renderer
 
 The goal is not to replace producer/CSR review. The goal is to remove the first pass of repetitive re-keying and make the review work explicit.
 
@@ -42,12 +43,17 @@ AMS CSV export
   -> explicit validation rules
   -> ACORD 125-style field mapping
   -> filled PDF draft
+  -> machine-readable form payload
   -> missing-field review report
 ```
 
 For the MVP, I assumed the pilot users are retail commercial P&C producers and CSRs preparing submission drafts for carrier markets. I also assumed the brokerage can export structured account data from an AMS such as Applied Epic, AMS360, or a similar agency management system.
 
 The output is intentionally a human-reviewable draft rather than an auto-submitted final application because insurance applications create E&O and compliance risk.
+
+The JSON output is included as the production bridge. A real pilot would use the same normalized payload to fill an official ACORD 125 template through an AcroForm filler or coordinate overlay renderer.
+
+An AcroForm is the fillable-field layer inside a PDF: text boxes, checkboxes, dates, and other controls with internal field names. If an official ACORD template exposes those fields, code can set values by field name instead of asking an LLM to rewrite the document layout.
 
 ## Discovery Questions And Assumptions
 
@@ -85,6 +91,10 @@ The script separates blocking fields from recommended fields. That makes the rev
 
 This MVP only renders an ACORD 125-style draft, but the structure is intentionally split into source parsing, validation, and form rendering. More forms can be added by creating new field groups and renderers that consume the same normalized account data.
 
+**Machine-readable payload as the integration contract**
+
+Each run writes a `*_form_payload.json` file containing normalized account data, validation results, mapped field payloads, and candidate AcroForm field values. The PDF is the human-facing demo output; the JSON is the handoff point for filling an official form template in a production pilot.
+
 **Draft output, not auto-submission**
 
 The skill generates a draft PDF and a review report. It does not submit to a carrier, wholesale broker, or portal. Direct submission would require customer-specific approval workflow, audit logging, carrier integration support, and legal/compliance review.
@@ -101,7 +111,7 @@ The skill generates a draft PDF and a review report. It does not submit to a car
 
 **More forms**
 
-Add form-specific mappers/renderers for ACORD 126, ACORD 130, carrier supplementals, and schedules. The parser and validation layer can stay shared while each form owns its own required fields and output layout.
+Add form-specific mappers/renderers for ACORD 126, ACORD 130, carrier supplementals, and schedules. The parser and validation layer can stay shared while each form owns its own required fields, JSON payload mapping, and output layout.
 
 **More lines**
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import html
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -57,6 +58,15 @@ RECOMMENDED_FIELDS = {
     "property_limit": "Property limit",
     "business_auto_limit": "Business auto limit",
     "workers_comp_estimated_payroll": "Workers comp estimated payroll",
+    "umbrella_limit": "Umbrella limit",
+}
+
+LINE_FIELD_TRIGGERS = {
+    "general_liability_limit": ("general liability",),
+    "property_limit": ("property",),
+    "business_auto_limit": ("business auto", "commercial auto"),
+    "workers_comp_estimated_payroll": ("workers compensation", "workers comp"),
+    "umbrella_limit": ("umbrella",),
 }
 
 DISPLAY_FIELDS = [
@@ -78,6 +88,50 @@ COVERAGE_FIELDS = [
     ("workers_comp_estimated_payroll", "Workers Compensation"),
     ("umbrella_limit", "Umbrella"),
 ]
+
+OPTIONAL_FIELDS = {
+    "dba": "DBA",
+    "website": "Website",
+    "primary_contact_phone": "Insured primary contact phone",
+    "agency_name": "Agency",
+    "producer_name": "Producer",
+    "csr_name": "CSR / account manager",
+    "notes": "Submission notes",
+}
+
+ACROFORM_FIELD_TARGETS = {
+    "account_id": ["F[0].P1[0].Producer_CustomerIdentifier_A[0]"],
+    "named_insured": ["F[0].P1[0].NamedInsured_FullName_A[0]"],
+    "fein": ["F[0].P1[0].NamedInsured_TaxIdentifier_A[0]"],
+    "naics": ["F[0].P1[0].NamedInsured_NAICSCode_A[0]"],
+    "mailing_street": ["F[0].P1[0].NamedInsured_MailingAddress_LineOne_A[0]"],
+    "mailing_city": ["F[0].P1[0].NamedInsured_MailingAddress_CityName_A[0]"],
+    "mailing_state": ["F[0].P1[0].NamedInsured_MailingAddress_StateOrProvinceCode_A[0]"],
+    "mailing_zip": ["F[0].P1[0].NamedInsured_MailingAddress_PostalCode_A[0]"],
+    "physical_street": ["F[0].P2[0].CommercialStructure_PhysicalAddress_LineOne_A[0]"],
+    "physical_city": ["F[0].P2[0].CommercialStructure_PhysicalAddress_CityName_A[0]"],
+    "physical_state": ["F[0].P2[0].CommercialStructure_PhysicalAddress_StateOrProvinceCode_A[0]"],
+    "physical_zip": ["F[0].P2[0].CommercialStructure_PhysicalAddress_PostalCode_A[0]"],
+    "primary_contact_name": ["F[0].P2[0].NamedInsured_Contact_FullName_A[0]"],
+    "primary_contact_email": ["F[0].P2[0].NamedInsured_Contact_PrimaryEmailAddress_A[0]"],
+    "primary_contact_phone": [
+        "F[0].P1[0].NamedInsured_Primary_PhoneNumber_A[0]",
+        "F[0].P2[0].NamedInsured_Contact_PrimaryPhoneNumber_A[0]",
+    ],
+    "agency_name": ["F[0].P1[0].Producer_FullName_A[0]"],
+    "producer_name": ["F[0].P1[0].Producer_ContactPerson_FullName_A[0]"],
+    "requested_effective_date": [
+        "F[0].P1[0].Policy_EffectiveDate_A[0]",
+        "F[0].P1[0].Policy_Status_EffectiveDate_A[0]",
+    ],
+    "annual_revenue": ["F[0].P2[0].CommercialStructure_AnnualRevenueAmount_A[0]"],
+    "employee_count": ["F[0].P2[0].BusinessInformation_FullTimeEmployeeCount_A[0]"],
+    "prior_policy_number": [
+        "F[0].P3[0].PriorCoverage_GeneralLiability_PolicyNumberIdentifier_A[0]"
+    ],
+    "prior_policy_expiration": ["F[0].P3[0].PriorCoverage_GeneralLiability_ExpirationDate_A[0]"],
+    "prior_premium": ["F[0].P3[0].PriorCoverage_GeneralLiability_TotalPremiumAmount_A[0]"],
+}
 
 
 @dataclass(frozen=True)
@@ -127,9 +181,17 @@ def validate_account(account: dict[str, str]) -> list[ReviewIssue]:
         if not clean(account.get(field)):
             issues.append(ReviewIssue(field, label, "blocking"))
     for field, label in RECOMMENDED_FIELDS.items():
-        if not clean(account.get(field)):
+        if is_recommended_field_applicable(account, field) and not clean(account.get(field)):
             issues.append(ReviewIssue(field, label, "recommended"))
     return issues
+
+
+def is_recommended_field_applicable(account: dict[str, str], field: str) -> bool:
+    triggers = LINE_FIELD_TRIGGERS.get(field)
+    if not triggers:
+        return True
+    requested_lines = clean(account.get("requested_lines")).lower()
+    return any(trigger in requested_lines for trigger in triggers)
 
 
 def format_address(account: dict[str, str], prefix: str) -> str:
@@ -356,14 +418,120 @@ def format_issue_lines(issues: list[ReviewIssue]) -> list[str]:
     return [f"- {issue.label} (`{issue.field}`)" for issue in issues]
 
 
-def process_account(account: dict[str, str], output_dir: Path) -> tuple[Path, Path]:
+def required_level(field: str) -> str:
+    if field in BLOCKING_FIELDS:
+        return "blocking"
+    if field in RECOMMENDED_FIELDS:
+        return "recommended"
+    return "optional"
+
+
+def field_label(field: str) -> str:
+    labels = {**BLOCKING_FIELDS, **RECOMMENDED_FIELDS, **OPTIONAL_FIELDS}
+    return labels.get(field, field.replace("_", " ").title())
+
+
+def build_acroform_fields(account: dict[str, str]) -> dict[str, str | bool]:
+    acroform_fields: dict[str, str | bool] = {}
+    for schema_key, targets in ACROFORM_FIELD_TARGETS.items():
+        field_value = clean(account.get(schema_key))
+        if not field_value:
+            continue
+        for target in targets:
+            acroform_fields[target] = field_value
+
+    entity_type = clean(account.get("entity_type")).lower()
+    if "llc" in entity_type or "limited liability" in entity_type:
+        acroform_fields[
+            "F[0].P1[0].NamedInsured_LegalEntity_LimitedLiabilityCorporationIndicator_A[0]"
+        ] = True
+    elif "corp" in entity_type:
+        acroform_fields["F[0].P1[0].NamedInsured_LegalEntity_CorporationIndicator_A[0]"] = True
+
+    requested_lines = clean(account.get("requested_lines")).lower()
+    line_targets = {
+        "general liability": "F[0].P1[0].Policy_LineOfBusiness_CommercialGeneralLiability_A[0]",
+        "property": "F[0].P1[0].Policy_LineOfBusiness_CommercialProperty_A[0]",
+        "business auto": "F[0].P1[0].Policy_LineOfBusiness_BusinessAutoIndicator_A[0]",
+        "umbrella": "F[0].P1[0].Policy_LineOfBusiness_UmbrellaIndicator_A[0]",
+        "liquor": "F[0].P1[0].Policy_LineOfBusiness_LiquorLiabilityIndicator_A[0]",
+    }
+    for line_name, target in line_targets.items():
+        if line_name in requested_lines:
+            acroform_fields[target] = True
+
+    return acroform_fields
+
+
+def build_field_payload(account: dict[str, str]) -> list[dict[str, object]]:
+    fields = sorted({*BLOCKING_FIELDS, *RECOMMENDED_FIELDS, *OPTIONAL_FIELDS})
+    payload = []
+    for field in fields:
+        raw_value = clean(account.get(field))
+        applicable = (
+            is_recommended_field_applicable(account, field)
+            if field in RECOMMENDED_FIELDS
+            else True
+        )
+        payload.append(
+            {
+                "schema_key": field,
+                "label": field_label(field),
+                "value": raw_value or None,
+                "required_level": required_level(field),
+                "applicable": applicable,
+                "source": f"ams_csv:{field}" if raw_value else None,
+                "acroform_targets": ACROFORM_FIELD_TARGETS.get(field, []),
+            }
+        )
+    return payload
+
+
+def write_json_payload(
+    account: dict[str, str],
+    issues: list[ReviewIssue],
+    source_csv: Path,
+    output_path: Path,
+) -> None:
+    blocking = [issue for issue in issues if issue.severity == "blocking"]
+    recommended = [issue for issue in issues if issue.severity == "recommended"]
+    status = "needs_review" if blocking else "ready_for_review"
+    payload = {
+        "form": {
+            "id": "ACORD_125_STYLE_DRAFT",
+            "description": "Machine-readable payload generated from structured AMS data.",
+            "production_note": "The acroform_fields object can feed a PDF AcroForm filler when mapped to an official template's internal field names.",
+        },
+        "metadata": {
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "source_type": "ams_csv",
+            "source_file": str(source_csv),
+            "account_id": value(account, "account_id"),
+            "review_status": status,
+        },
+        "normalized_account": account,
+        "validation": {
+            "blocking_missing": [issue.field for issue in blocking],
+            "recommended_missing": [issue.field for issue in recommended],
+        },
+        "field_payload": build_field_payload(account),
+        "acroform_fields": build_acroform_fields(account),
+    }
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def process_account(
+    account: dict[str, str], source_csv: Path, output_dir: Path
+) -> tuple[Path, Path, Path]:
     issues = validate_account(account)
     account_slug = slugify(f"{value(account, 'account_id')}-{value(account, 'named_insured')}")
     pdf_path = output_dir / f"{account_slug}_application_draft.pdf"
     report_path = output_dir / f"{account_slug}_review_report.md"
+    json_path = output_dir / f"{account_slug}_form_payload.json"
     generate_pdf(account, issues, pdf_path)
     write_review_report(account, issues, report_path)
-    return pdf_path, report_path
+    write_json_payload(account, issues, source_csv, json_path)
+    return pdf_path, report_path, json_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -385,9 +553,10 @@ def main() -> None:
     accounts = select_accounts(read_accounts(args.csv), args.account_id)
 
     for account in accounts:
-        pdf_path, report_path = process_account(account, args.out)
+        pdf_path, report_path, json_path = process_account(account, args.csv, args.out)
         print(f"Wrote {pdf_path}")
         print(f"Wrote {report_path}")
+        print(f"Wrote {json_path}")
 
 
 if __name__ == "__main__":
