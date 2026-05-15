@@ -21,7 +21,8 @@ The generated application is a human-reviewable draft. It is not automatically s
 
 ## Inputs
 
-Expected CSV columns are shown in `sample_inputs/applied_epic_ams_export.csv`.
+Expected account CSV columns are shown in `sample_inputs/acme_mechanical/ams_export.csv`.
+Each example folder can also include `target_markets.csv` to generate carrier-specific ACORD copies.
 
 The important fields include:
 
@@ -42,16 +43,15 @@ From the repository root, run:
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --csv sample_inputs/applied_epic_ams_export.csv \
-  --account-id ACME-001 \
+  --input-dir sample_inputs/acme_mechanical \
   --out outputs/demo
 ```
 
-To process every account in the CSV, omit `--account-id`:
+To run the incomplete-data review scenario:
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --csv sample_inputs/applied_epic_ams_export.csv \
+  --input-dir sample_inputs/birchwood_hospitality \
   --out outputs/demo
 ```
 
@@ -59,19 +59,31 @@ If a fillable ACORD 125 template is available locally, pass it with `--template`
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --csv sample_inputs/applied_epic_ams_export.csv \
+  --input-dir sample_inputs/acme_mechanical \
+  --template ../Acord125_Template.pdf \
+  --out outputs/demo
+```
+
+When filling an official template, review the printed verification summary to confirm the target fields landed in the AcroForm.
+
+To override the folder convention, pass explicit paths:
+
+```bash
+python3 scripts/fill_acord125.py \
+  --csv sample_inputs/acme_mechanical/ams_export.csv \
+  --markets sample_inputs/acme_mechanical/target_markets.csv \
   --template ../Acord125_Template.pdf \
   --out outputs/demo
 ```
 
 ## Outputs
 
-For each account, the script writes:
+For each account/carrier combination, the script writes one folder named from the account and target market. The folder contains:
 
-- `*_application_draft.pdf`: filled ACORD 125-style draft application
-- `*_review_report.md`: missing-field report for CSR/producer review
-- `*_form_payload.json`: normalized account data, validation state, and candidate AcroForm field values for a production PDF filler
-- `*_official_acord125.pdf`: optional filled official ACORD 125 template when `--template` is supplied
+- `official_acord125.pdf`: filled official ACORD 125 template when `--template` is supplied
+- `application_draft.pdf`: fallback ACORD 125-style draft application when no template is supplied
+- `review_report.md`: missing-field report for CSR/producer review
+- `form_payload.json`: normalized account data, validation state, and candidate AcroForm field values for a production PDF filler
 
 ## Operating Rules
 

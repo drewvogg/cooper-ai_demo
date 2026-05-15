@@ -1,8 +1,8 @@
 # Accordingly
 
-Accordingly is a small deterministic Claude Skill MVP for a mid-market commercial P&C brokerage. It ingests an AMS-style CSV export for one or more accounts and produces:
+Accordingly is a small deterministic Claude Skill MVP for a mid-market commercial P&C brokerage. It ingests an AMS-style CSV export for one or more accounts and produces one output package per account/carrier combination:
 
-- a filled ACORD 125-style commercial application draft PDF
+- a filled official ACORD 125 PDF when a template is supplied, otherwise an ACORD 125-style draft PDF
 - a markdown review report showing missing blocking and recommended fields
 - a JSON payload that can feed a production official-form renderer
 
@@ -16,20 +16,19 @@ Install dependencies:
 python3 -m pip install -r requirements.txt
 ```
 
-Generate one clean application:
+Generate the Acme Mechanical example:
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --csv sample_inputs/applied_epic_ams_export.csv \
-  --account-id ACME-001 \
+  --input-dir sample_inputs/acme_mechanical \
   --out outputs/demo
 ```
 
-Generate every sample account, including one with missing blocking data:
+Generate the Birchwood Hospitality example, which intentionally has a missing blocking field:
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --csv sample_inputs/applied_epic_ams_export.csv \
+  --input-dir sample_inputs/birchwood_hospitality \
   --out outputs/demo
 ```
 
@@ -37,7 +36,24 @@ If you have a fillable ACORD 125 PDF template locally, generate official filled 
 
 ```bash
 python3 scripts/fill_acord125.py \
-  --csv sample_inputs/applied_epic_ams_export.csv \
+  --input-dir sample_inputs/acme_mechanical \
+  --template ../Acord125_Template.pdf \
+  --out outputs/demo
+```
+
+When `--template` is supplied, the CLI prints a short verification summary for the highest-value official ACORD fields, including completion date, website, prior carrier, repeated customer IDs, transaction status, policy dates, business type, operations, attachment indicators, umbrella, and premium fields.
+
+Each example folder contains:
+
+- `ams_export.csv`: one account's structured AMS export
+- `target_markets.csv`: optional carrier/program targets used to generate one ACORD copy per market
+
+You can also pass files directly:
+
+```bash
+python3 scripts/fill_acord125.py \
+  --csv sample_inputs/acme_mechanical/ams_export.csv \
+  --markets sample_inputs/acme_mechanical/target_markets.csv \
   --template ../Acord125_Template.pdf \
   --out outputs/demo
 ```
@@ -48,6 +64,7 @@ I built the narrow deterministic version of the skill:
 
 ```text
 AMS CSV export
+  -> optional target market CSV
   -> deterministic parser
   -> explicit validation rules
   -> ACORD 125-style field mapping
@@ -61,7 +78,7 @@ For the MVP, I assumed the pilot users are retail commercial P&C producers and C
 
 The output is intentionally a human-reviewable draft rather than an auto-submitted final application because insurance applications create E&O and compliance risk.
 
-The JSON output is included as the production bridge. If a fillable ACORD 125 template is provided, the script also fills the mapped subset of official AcroForm fields directly.
+The JSON output is included as the production bridge. If a fillable ACORD 125 template is provided, the script also fills the mapped subset of official AcroForm fields directly. If target markets are provided, it generates one carrier-specific copy per market.
 
 An AcroForm is the fillable-field layer inside a PDF: text boxes, checkboxes, dates, and other controls with internal field names. If an official ACORD template exposes those fields, code can set values by field name instead of asking an LLM to rewrite the document layout.
 
@@ -103,15 +120,15 @@ This MVP renders an ACORD 125-style draft by default and can optionally fill a r
 
 **Machine-readable payload as the integration contract**
 
-Each run writes a `*_form_payload.json` file containing normalized account data, validation results, mapped field payloads, and candidate AcroForm field values. The PDF is the human-facing demo output; the JSON is the handoff point for filling an official form template in a production pilot.
+Each account/carrier run writes a folder containing `form_payload.json`, `review_report.md`, and either `official_acord125.pdf` when an AcroForm template is supplied or `application_draft.pdf` when running without a template. The PDF is the human-facing demo output; the JSON is the handoff point for filling an official form template in a production pilot.
 
 **Official template fill as an optional renderer**
 
-The script can also fill a real ACORD 125 AcroForm template when supplied with `--template`. I kept the template out of the repo and made this opt-in so the deterministic skill still runs anywhere, while the onsite demo can show the same payload landing in an actual ACORD artifact.
+The script can also fill a real ACORD 125 AcroForm template when supplied with `--template`. I kept the template out of the repo and made this opt-in so the deterministic skill still runs anywhere, while the onsite demo can show the same payload landing in an actual ACORD artifact. When `target_markets.csv` is present, the skill creates carrier-specific official drafts with carrier, NAIC, program, underwriter, and quote-status fields populated.
 
 **Draft output, not auto-submission**
 
-The skill generates a draft PDF and a review report. It does not submit to a carrier, wholesale broker, or portal. Direct submission would require customer-specific approval workflow, audit logging, carrier integration support, and legal/compliance review.
+The skill generates a PDF package and a review report. It does not submit to a carrier, wholesale broker, or portal. Direct submission would require customer-specific approval workflow, audit logging, carrier integration support, and legal/compliance review.
 
 ## What I Cut
 

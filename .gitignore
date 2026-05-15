@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
@@ -52,8 +53,8 @@ coverage.xml
 cover/
 
 # Generated demo artifacts
-outputs/demo/
-outputs/previews/
+outputs/*
+!outputs/.gitkeep
 
 # Translations
 *.mo

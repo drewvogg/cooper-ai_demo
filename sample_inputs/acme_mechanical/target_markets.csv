@@ -1,0 +1,4 @@
+target_market_id,carrier_name,carrier_naic_code,program_name,program_code,underwriter_name,underwriter_office
+TRV-GLPROP,Travelers Commercial,25658,Middle Market Contractors Package,MM-CONTRACTORS,Alex Morgan,Denver Middle Market
+HART-CPKG,The Hartford,19682,Commercial Package Select,CPS-125,Nina Shah,Central Region
+LIB-UMBRELLA,Liberty Mutual,23043,Commercial Umbrella Follow-Form,CUF-5M,Marcus Lee,Western Region
