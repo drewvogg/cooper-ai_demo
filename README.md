@@ -12,11 +12,11 @@ The goal is not to replace producer/CSR review. The goal is to remove the first 
 
 ## Suggested Demo Flow
 
-1. Run the Acme Mechanical example to show a complete draft package.
-2. Open the generated carrier-specific folder and show the filled PDF, review report, and JSON payload.
-3. Run the Birchwood Hospitality example to show how the skill handles missing blocking data.
-4. Open Birchwood's review report and point out that the form is generated, but the package is not marked ready because FEIN is missing.
-5. Use `--template templates/Acord125_Template.pdf` to show the normalized payload filling a real AcroForm PDF.
+1. Place the licensed ACORD 125 template at `templates/Acord125_Template.pdf` (required for all runs).
+2. Run the Acme Mechanical example to show a complete filled package.
+3. Open the generated carrier-specific folder and show the filled PDF, review report, and JSON payload.
+4. Run the Birchwood Hospitality example to show how the skill handles missing blocking data.
+5. Open Birchwood's review report and point out that the form is generated, but the package is not marked ready because FEIN is missing.
 
 ## Demo Command
 
