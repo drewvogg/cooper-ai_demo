@@ -1,29 +1,16 @@
 #!/usr/bin/env python3
-"""Generate an ACORD 125-style draft application from an AMS CSV export."""
+"""Fill an official ACORD 125 AcroForm template from an AMS CSV export."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import html
 import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
-
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.platypus import (
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
 
 
 BLOCKING_FIELDS = {
@@ -69,24 +56,6 @@ LINE_FIELD_TRIGGERS = {
     "workers_comp_premium": ("workers compensation", "workers comp"),
     "umbrella_limit": ("umbrella",),
 }
-
-DISPLAY_FIELDS = [
-    ("named_insured", "Named Insured"),
-    ("entity_type", "Entity Type"),
-    ("fein", "FEIN"),
-    ("naics", "NAICS"),
-    ("annual_revenue", "Annual Revenue"),
-    ("employee_count", "Employee Count"),
-    ("website", "Website"),
-]
-
-COVERAGE_FIELDS = [
-    ("general_liability_limit", "General Liability"),
-    ("property_limit", "Property"),
-    ("business_auto_limit", "Business Auto"),
-    ("workers_comp_estimated_payroll", "Workers Compensation"),
-    ("umbrella_limit", "Umbrella"),
-]
 
 OPTIONAL_FIELDS = {
     "llc_member_manager_count": "LLC member / manager count",
@@ -316,18 +285,6 @@ def is_recommended_field_applicable(account: dict[str, str], field: str) -> bool
     return any(trigger in requested_lines for trigger in triggers)
 
 
-def format_address(account: dict[str, str], prefix: str) -> str:
-    """Build a two-line address from prefixed CSV columns."""
-    street = clean(account.get(f"{prefix}_street"))
-    city = clean(account.get(f"{prefix}_city"))
-    state = clean(account.get(f"{prefix}_state"))
-    zip_code = clean(account.get(f"{prefix}_zip"))
-    line_two = ", ".join(part for part in [city, state] if part)
-    if zip_code:
-        line_two = f"{line_two} {zip_code}".strip()
-    return "\n".join(part for part in [street, line_two] if part)
-
-
 def format_pdf_date(value: str) -> str:
     """Convert supported input date formats to ACORD's MM/DD/YYYY style."""
     for date_format in ("%Y-%m-%d", "%m/%d/%Y"):
@@ -346,224 +303,6 @@ def truncate(value: str, max_length: int) -> str:
 def value(account: dict[str, str], field: str) -> str:
     """Read a display value and mark missing data visibly."""
     return clean(account.get(field)) or "MISSING"
-
-
-def paragraph(text: str, style: ParagraphStyle) -> Paragraph:
-    """Create a safe ReportLab paragraph from plain text."""
-    return Paragraph(html.escape(text).replace("\n", "<br/>"), style)
-
-
-def build_key_value_table(
-    account: dict[str, str],
-    rows: list[tuple[str, str]],
-    body_style: ParagraphStyle,
-) -> Table:
-    """Render labeled account fields as a simple PDF table."""
-    table_data = [
-        [paragraph(label, body_style), paragraph(value(account, field), body_style)]
-        for field, label in rows
-    ]
-    table = Table(table_data, colWidths=[2.1 * inch, 4.8 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#b8c1cc")),
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#edf2f7")),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]
-        )
-    )
-    return table
-
-
-def build_section_heading(text: str, styles) -> Paragraph:
-    """Create a consistent section heading for the fallback draft PDF."""
-    return Paragraph(text, styles["section"])
-
-
-def build_target_market_section(account: dict[str, str], styles) -> list:
-    """Build the fallback PDF section for carrier/program metadata."""
-    market_fields = [
-        "target_market_id",
-        "carrier_name",
-        "carrier_naic_code",
-        "program_name",
-        "program_code",
-        "underwriter_name",
-        "underwriter_office",
-        "market_notes",
-    ]
-    if not any(clean(account.get(field)) for field in market_fields):
-        return []
-    return [
-        build_section_heading("Target Market", styles),
-        build_key_value_table(
-            account,
-            [
-                ("target_market_id", "Target Market ID"),
-                ("carrier_name", "Carrier"),
-                ("carrier_naic_code", "NAIC Code"),
-                ("program_name", "Program"),
-                ("program_code", "Program Code"),
-                ("underwriter_name", "Underwriter"),
-                ("underwriter_office", "Underwriter Office"),
-                ("market_notes", "Market Notes"),
-            ],
-            styles["BodyText"],
-        ),
-    ]
-
-
-def generate_pdf(
-    account: dict[str, str],
-    issues: list[ReviewIssue],
-    output_path: Path,
-    generated_at: datetime,
-) -> None:
-    """Generate the fallback ACORD-style PDF when no official template is used."""
-    styles = getSampleStyleSheet()
-    styles.add(
-        ParagraphStyle(
-            name="section",
-            parent=styles["Heading2"],
-            fontSize=11,
-            leading=14,
-            spaceBefore=10,
-            spaceAfter=6,
-            textColor=colors.HexColor("#1f2937"),
-        )
-    )
-    styles.add(
-        ParagraphStyle(
-            name="small",
-            parent=styles["BodyText"],
-            fontSize=8,
-            leading=10,
-        )
-    )
-
-    doc = SimpleDocTemplate(
-        str(output_path),
-        pagesize=letter,
-        rightMargin=0.55 * inch,
-        leftMargin=0.55 * inch,
-        topMargin=0.45 * inch,
-        bottomMargin=0.45 * inch,
-    )
-
-    status = (
-        "Ready for review"
-        if not any(i.severity == "blocking" for i in issues)
-        else "Needs CSR review"
-    )
-    title = f"ACORD 125-Style Commercial Application Draft: {value(account, 'named_insured')}"
-    story = [
-        paragraph(title, styles["Title"]),
-        Paragraph(
-            "Generated from an AMS CSV export. This is a human-reviewable draft, not an automatically submitted final application.",
-            styles["small"],
-        ),
-        Spacer(1, 8),
-        build_key_value_table(
-            {
-                "account_id": value(account, "account_id"),
-                "status": status,
-                "generated_at": generated_at.strftime("%Y-%m-%d %H:%M"),
-            },
-            [
-                ("account_id", "Account ID"),
-                ("status", "Review Status"),
-                ("generated_at", "Generated At"),
-            ],
-            styles["BodyText"],
-        ),
-        build_section_heading("Applicant Information", styles),
-        build_key_value_table(account, DISPLAY_FIELDS, styles["BodyText"]),
-        build_section_heading("Addresses", styles),
-        build_key_value_table(
-            {
-                "mailing": format_address(account, "mailing") or "MISSING",
-                "physical": format_address(account, "physical") or "MISSING",
-            },
-            [("mailing", "Mailing Address"), ("physical", "Primary Physical Location")],
-            styles["BodyText"],
-        ),
-        build_section_heading("Insured Contact And Brokerage Team", styles),
-        build_key_value_table(
-            account,
-            [
-                ("primary_contact_name", "Insured Primary Contact"),
-                ("primary_contact_email", "Insured Contact Email"),
-                ("primary_contact_phone", "Insured Contact Phone"),
-                ("agency_name", "Agency"),
-                ("producer_name", "Producer"),
-                ("csr_name", "CSR / Account Manager"),
-            ],
-            styles["BodyText"],
-        ),
-        *build_target_market_section(account, styles),
-        build_section_heading("Requested Coverage", styles),
-        build_key_value_table(
-            account,
-            [
-                ("requested_effective_date", "Requested Effective Date"),
-                ("requested_lines", "Requested Lines"),
-                *COVERAGE_FIELDS,
-            ],
-            styles["BodyText"],
-        ),
-        build_section_heading("Prior Coverage", styles),
-        build_key_value_table(
-            account,
-            [
-                ("prior_carrier", "Prior Carrier"),
-                ("prior_policy_number", "Prior Policy Number"),
-                ("prior_policy_expiration", "Prior Expiration"),
-                ("prior_premium", "Prior Premium"),
-            ],
-            styles["BodyText"],
-        ),
-        build_section_heading("Submission Notes", styles),
-        paragraph(clean(account.get("notes")) or "No notes provided.", styles["BodyText"]),
-        build_section_heading("Review Flags", styles),
-    ]
-
-    if issues:
-        issue_rows = [
-            [
-                paragraph(issue.severity.title(), styles["BodyText"]),
-                paragraph(issue.label, styles["BodyText"]),
-                paragraph(issue.field, styles["small"]),
-            ]
-            for issue in issues
-        ]
-        issue_table = Table(
-            [["Severity", "Missing Field", "Schema Key"], *issue_rows],
-            colWidths=[1.2 * inch, 3.1 * inch, 2.6 * inch],
-        )
-        issue_table.setStyle(
-            TableStyle(
-                [
-                    ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#b8c1cc")),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                    ("TOPPADDING", (0, 0), (-1, -1), 5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ]
-            )
-        )
-        story.append(issue_table)
-    else:
-        story.append(Paragraph("No blocking or recommended field gaps found.", styles["BodyText"]))
-
-    doc.build(story)
 
 
 def write_review_report(account: dict[str, str], issues: list[ReviewIssue], output_path: Path) -> None:
@@ -1000,8 +739,8 @@ def process_account(
     account: dict[str, str],
     source_csv: Path,
     output_dir: Path,
-    template_path: Path | None,
-) -> tuple[Path, Path | None, Path, Path, Path | None]:
+    template_path: Path,
+) -> tuple[Path, Path, Path, Path]:
     """Generate all artifacts for one normalized account/carrier variant."""
     issues = validate_account(account)
     generated_at = datetime.now()
@@ -1013,36 +752,32 @@ def process_account(
     package_dir = output_dir / account_slug
     package_dir.mkdir(parents=True, exist_ok=True)
 
-    draft_pdf_path = package_dir / "application_draft.pdf" if not template_path else None
     report_path = package_dir / "review_report.md"
     json_path = package_dir / "form_payload.json"
-    official_pdf_path = package_dir / "official_acord125.pdf" if template_path else None
+    official_pdf_path = package_dir / "official_acord125.pdf"
 
-    if draft_pdf_path:
-        generate_pdf(account, issues, draft_pdf_path, generated_at)
     write_review_report(account, issues, report_path)
     write_json_payload(account, issues, source_csv, json_path, generated_at)
-    if template_path and official_pdf_path:
-        filled_count, unmapped_fields = fill_official_acord_template(
-            template_path, account, official_pdf_path, generated_at
-        )
-        target = market_slug or "generic market"
+    filled_count, unmapped_fields = fill_official_acord_template(
+        template_path, account, official_pdf_path, generated_at
+    )
+    target = market_slug or "generic market"
+    print(
+        f"Filled {filled_count} official ACORD fields "
+        f"for {value(account, 'account_id')} / {target}"
+    )
+    print_official_pdf_verification(official_pdf_path, account)
+    if unmapped_fields:
         print(
-            f"Filled {filled_count} official ACORD fields "
-            f"for {value(account, 'account_id')} / {target}"
+            f"Skipped {len(unmapped_fields)} candidate fields not present in template"
         )
-        print_official_pdf_verification(official_pdf_path, account)
-        if unmapped_fields:
-            print(
-                f"Skipped {len(unmapped_fields)} candidate fields not present in template"
-            )
-    return package_dir, draft_pdf_path, report_path, json_path, official_pdf_path
+    return package_dir, report_path, json_path, official_pdf_path
 
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for local runs or Claude Skill execution."""
     parser = argparse.ArgumentParser(
-        description="Fill an ACORD 125-style commercial application draft from an AMS CSV export."
+        description="Fill an official ACORD 125 AcroForm template from an AMS CSV export."
     )
     parser.add_argument(
         "--input-dir",
@@ -1058,7 +793,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--template",
         type=Path,
-        help="Optional path to a fillable ACORD 125 PDF template.",
+        required=True,
+        help="Path to a fillable ACORD 125 PDF template supplied locally.",
     )
     parser.add_argument("--out", default=Path("outputs/demo"), type=Path, help="Output directory.")
     return parser.parse_args()
@@ -1067,7 +803,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run the full CSV-to-form workflow from the command line."""
     args = parse_args()
-    if args.template and not args.template.exists():
+    if not args.template.exists():
         raise FileNotFoundError(f"Template not found: {args.template}")
 
     csv_path, markets_path = resolve_input_paths(args)
@@ -1077,20 +813,13 @@ def main() -> None:
 
     for account in accounts:
         for variant in account_market_variants(account, markets):
-            (
-                package_dir,
-                draft_pdf_path,
-                report_path,
-                json_path,
-                official_pdf_path,
-            ) = process_account(variant, csv_path, args.out, args.template)
+            package_dir, report_path, json_path, official_pdf_path = process_account(
+                variant, csv_path, args.out, args.template
+            )
             print(f"Wrote package {package_dir}")
-            if draft_pdf_path:
-                print(f"Wrote {draft_pdf_path}")
             print(f"Wrote {report_path}")
             print(f"Wrote {json_path}")
-            if official_pdf_path:
-                print(f"Wrote {official_pdf_path}")
+            print(f"Wrote {official_pdf_path}")
 
 
 if __name__ == "__main__":
