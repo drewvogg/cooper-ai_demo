@@ -281,7 +281,7 @@ def generate_pdf(account: dict[str, str], issues: list[ReviewIssue], output_path
     )
     title = f"ACORD 125-Style Commercial Application Draft: {value(account, 'named_insured')}"
     story = [
-        Paragraph(title, styles["Title"]),
+        paragraph(title, styles["Title"]),
         Paragraph(
             "Generated from an AMS CSV export. This is a human-reviewable draft, not an automatically submitted final application.",
             styles["small"],
@@ -346,7 +346,7 @@ def generate_pdf(account: dict[str, str], issues: list[ReviewIssue], output_path
             styles["BodyText"],
         ),
         build_section_heading("Submission Notes", styles),
-        Paragraph(clean(account.get("notes")) or "No notes provided.", styles["BodyText"]),
+        paragraph(clean(account.get("notes")) or "No notes provided.", styles["BodyText"]),
         build_section_heading("Review Flags", styles),
     ]
 
