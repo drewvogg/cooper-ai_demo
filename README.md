@@ -33,6 +33,15 @@ python3 scripts/fill_acord125.py \
   --out outputs/demo
 ```
 
+If you have a fillable ACORD 125 PDF template locally, generate official filled drafts as well:
+
+```bash
+python3 scripts/fill_acord125.py \
+  --csv sample_inputs/applied_epic_ams_export.csv \
+  --template ../Acord125_Template.pdf \
+  --out outputs/demo
+```
+
 ## What I Chose To Build
 
 I built the narrow deterministic version of the skill:
@@ -44,6 +53,7 @@ AMS CSV export
   -> ACORD 125-style field mapping
   -> filled PDF draft
   -> machine-readable form payload
+  -> optional official ACORD 125 AcroForm fill
   -> missing-field review report
 ```
 
@@ -51,7 +61,7 @@ For the MVP, I assumed the pilot users are retail commercial P&C producers and C
 
 The output is intentionally a human-reviewable draft rather than an auto-submitted final application because insurance applications create E&O and compliance risk.
 
-The JSON output is included as the production bridge. A real pilot would use the same normalized payload to fill an official ACORD 125 template through an AcroForm filler or coordinate overlay renderer.
+The JSON output is included as the production bridge. If a fillable ACORD 125 template is provided, the script also fills the mapped subset of official AcroForm fields directly.
 
 An AcroForm is the fillable-field layer inside a PDF: text boxes, checkboxes, dates, and other controls with internal field names. If an official ACORD template exposes those fields, code can set values by field name instead of asking an LLM to rewrite the document layout.
 
@@ -89,11 +99,15 @@ The script separates blocking fields from recommended fields. That makes the rev
 
 **Form-specific mapper behind a normalized schema**
 
-This MVP only renders an ACORD 125-style draft, but the structure is intentionally split into source parsing, validation, and form rendering. More forms can be added by creating new field groups and renderers that consume the same normalized account data.
+This MVP renders an ACORD 125-style draft by default and can optionally fill a real ACORD 125 AcroForm template. The structure is intentionally split into source parsing, validation, and form rendering. More forms can be added by creating new field groups and renderers that consume the same normalized account data.
 
 **Machine-readable payload as the integration contract**
 
 Each run writes a `*_form_payload.json` file containing normalized account data, validation results, mapped field payloads, and candidate AcroForm field values. The PDF is the human-facing demo output; the JSON is the handoff point for filling an official form template in a production pilot.
+
+**Official template fill as an optional renderer**
+
+The script can also fill a real ACORD 125 AcroForm template when supplied with `--template`. I kept the template out of the repo and made this opt-in so the deterministic skill still runs anywhere, while the onsite demo can show the same payload landing in an actual ACORD artifact.
 
 **Draft output, not auto-submission**
 
@@ -101,7 +115,7 @@ The skill generates a draft PDF and a review report. It does not submit to a car
 
 ## What I Cut
 
-- Official ACORD PDF overlay or AcroForm filling. This is important for production but coordinate/field mapping work is time-consuming and not the highest-value proof point for the MVP.
+- Full official ACORD 125 field coverage. The template contains hundreds of fields; this MVP fills the high-value account/submission fields available from the sample AMS export.
 - Unstructured document extraction from declaration pages, current policies, and emails.
 - Carrier-specific supplemental applications.
 - Portal/API submission.

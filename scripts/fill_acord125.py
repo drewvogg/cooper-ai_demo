@@ -120,10 +120,7 @@ ACROFORM_FIELD_TARGETS = {
     ],
     "agency_name": ["F[0].P1[0].Producer_FullName_A[0]"],
     "producer_name": ["F[0].P1[0].Producer_ContactPerson_FullName_A[0]"],
-    "requested_effective_date": [
-        "F[0].P1[0].Policy_EffectiveDate_A[0]",
-        "F[0].P1[0].Policy_Status_EffectiveDate_A[0]",
-    ],
+    "requested_effective_date": ["F[0].P1[0].Policy_EffectiveDate_A[0]"],
     "annual_revenue": ["F[0].P2[0].CommercialStructure_AnnualRevenueAmount_A[0]"],
     "employee_count": ["F[0].P2[0].BusinessInformation_FullTimeEmployeeCount_A[0]"],
     "prior_policy_number": [
@@ -453,12 +450,18 @@ def build_acroform_fields(account: dict[str, str]) -> dict[str, str | bool]:
         "general liability": "F[0].P1[0].Policy_LineOfBusiness_CommercialGeneralLiability_A[0]",
         "property": "F[0].P1[0].Policy_LineOfBusiness_CommercialProperty_A[0]",
         "business auto": "F[0].P1[0].Policy_LineOfBusiness_BusinessAutoIndicator_A[0]",
+        "commercial auto": "F[0].P1[0].Policy_LineOfBusiness_BusinessAutoIndicator_A[0]",
         "umbrella": "F[0].P1[0].Policy_LineOfBusiness_UmbrellaIndicator_A[0]",
         "liquor": "F[0].P1[0].Policy_LineOfBusiness_LiquorLiabilityIndicator_A[0]",
     }
     for line_name, target in line_targets.items():
         if line_name in requested_lines:
             acroform_fields[target] = True
+    if "workers compensation" in requested_lines or "workers comp" in requested_lines:
+        acroform_fields["F[0].P1[0].Policy_LineOfBusiness_OtherIndicator_A[0]"] = True
+        acroform_fields[
+            "F[0].P1[0].Policy_LineOfBusiness_OtherLineOfBusinessDescription_A[0]"
+        ] = "Workers Compensation"
 
     return acroform_fields
 
@@ -520,18 +523,78 @@ def write_json_payload(
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def fill_official_acord_template(
+    template_path: Path,
+    account: dict[str, str],
+    output_path: Path,
+) -> tuple[int, list[str]]:
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import BooleanObject, NameObject
+
+    reader = PdfReader(str(template_path))
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    available_fields = set((reader.get_fields() or {}).keys())
+    candidate_fields = build_acroform_fields(account)
+    fillable_fields = {
+        field_name: pdf_field_value(field_value)
+        for field_name, field_value in candidate_fields.items()
+        if field_name in available_fields
+    }
+    unmapped_fields = sorted(set(candidate_fields) - available_fields)
+
+    for page in writer.pages:
+        writer.update_page_form_field_values(page, fillable_fields, auto_regenerate=True)
+
+    if "/AcroForm" in writer._root_object:
+        writer._root_object["/AcroForm"].update(
+            {NameObject("/NeedAppearances"): BooleanObject(True)}
+        )
+
+    with output_path.open("wb") as file:
+        writer.write(file)
+
+    return len(fillable_fields), unmapped_fields
+
+
+def pdf_field_value(field_value: str | bool) -> str:
+    if field_value is True:
+        return "/1"
+    if field_value is False:
+        return "/Off"
+    return field_value
+
+
 def process_account(
-    account: dict[str, str], source_csv: Path, output_dir: Path
-) -> tuple[Path, Path, Path]:
+    account: dict[str, str],
+    source_csv: Path,
+    output_dir: Path,
+    template_path: Path | None,
+) -> tuple[Path, Path, Path, Path | None]:
     issues = validate_account(account)
     account_slug = slugify(f"{value(account, 'account_id')}-{value(account, 'named_insured')}")
     pdf_path = output_dir / f"{account_slug}_application_draft.pdf"
     report_path = output_dir / f"{account_slug}_review_report.md"
     json_path = output_dir / f"{account_slug}_form_payload.json"
+    official_pdf_path = (
+        output_dir / f"{account_slug}_official_acord125.pdf" if template_path else None
+    )
     generate_pdf(account, issues, pdf_path)
     write_review_report(account, issues, report_path)
     write_json_payload(account, issues, source_csv, json_path)
-    return pdf_path, report_path, json_path
+    if template_path and official_pdf_path:
+        filled_count, unmapped_fields = fill_official_acord_template(
+            template_path, account, official_pdf_path
+        )
+        print(
+            f"Filled {filled_count} official ACORD fields for {value(account, 'account_id')}"
+        )
+        if unmapped_fields:
+            print(
+                f"Skipped {len(unmapped_fields)} candidate fields not present in template"
+            )
+    return pdf_path, report_path, json_path, official_pdf_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -543,20 +606,32 @@ def parse_args() -> argparse.Namespace:
         "--account-id",
         help="Optional account_id to process. If omitted, every row in the CSV is processed.",
     )
+    parser.add_argument(
+        "--template",
+        type=Path,
+        help="Optional path to a fillable ACORD 125 PDF template.",
+    )
     parser.add_argument("--out", default=Path("outputs/demo"), type=Path, help="Output directory.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.template and not args.template.exists():
+        raise FileNotFoundError(f"Template not found: {args.template}")
+
     args.out.mkdir(parents=True, exist_ok=True)
     accounts = select_accounts(read_accounts(args.csv), args.account_id)
 
     for account in accounts:
-        pdf_path, report_path, json_path = process_account(account, args.csv, args.out)
+        pdf_path, report_path, json_path, official_pdf_path = process_account(
+            account, args.csv, args.out, args.template
+        )
         print(f"Wrote {pdf_path}")
         print(f"Wrote {report_path}")
         print(f"Wrote {json_path}")
+        if official_pdf_path:
+            print(f"Wrote {official_pdf_path}")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ This MVP handles one deterministic path:
 2. Select one account row or process every row.
 3. Validate required and recommended fields for an ACORD 125-style commercial application draft.
 4. Generate a filled PDF draft, a markdown review report, and a machine-readable JSON payload.
+5. Optionally fill a real ACORD 125 AcroForm template if the user supplies one.
 
 The generated application is a human-reviewable draft. It is not automatically submitted to a carrier or market.
 
@@ -54,6 +55,15 @@ python3 scripts/fill_acord125.py \
   --out outputs/demo
 ```
 
+If a fillable ACORD 125 template is available locally, pass it with `--template`:
+
+```bash
+python3 scripts/fill_acord125.py \
+  --csv sample_inputs/applied_epic_ams_export.csv \
+  --template ../Acord125_Template.pdf \
+  --out outputs/demo
+```
+
 ## Outputs
 
 For each account, the script writes:
@@ -61,6 +71,7 @@ For each account, the script writes:
 - `*_application_draft.pdf`: filled ACORD 125-style draft application
 - `*_review_report.md`: missing-field report for CSR/producer review
 - `*_form_payload.json`: normalized account data, validation state, and candidate AcroForm field values for a production PDF filler
+- `*_official_acord125.pdf`: optional filled official ACORD 125 template when `--template` is supplied
 
 ## Operating Rules
 
