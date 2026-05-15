@@ -51,6 +51,10 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Generated demo artifacts
+outputs/demo/
+outputs/previews/
+
 # Translations
 *.mo
 *.pot

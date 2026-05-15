@@ -1,0 +1,73 @@
+---
+name: accordingly
+description: Fill an ACORD 125-style commercial application draft from a structured AMS CSV export.
+---
+
+# Accordingly
+
+Use this skill when a user uploads or points to an AMS-style CSV export for a commercial P&C account and asks for a filled insurance application draft.
+
+## What This Skill Does
+
+This MVP handles one deterministic path:
+
+1. Read a structured AMS CSV export.
+2. Select one account row or process every row.
+3. Validate required and recommended fields for an ACORD 125-style commercial application draft.
+4. Generate a filled PDF draft and a markdown review report.
+
+The generated application is a human-reviewable draft. It is not automatically submitted to a carrier or market.
+
+## Inputs
+
+Expected CSV columns are shown in `sample_inputs/applied_epic_ams_export.csv`.
+
+The important fields include:
+
+- `account_id`
+- `named_insured`
+- `entity_type`
+- `fein`
+- `naics`
+- mailing and physical address fields
+- insured primary contact fields
+- requested effective date and requested lines
+- current/prior policy fields where available
+- requested limits by line of business
+
+## How To Run
+
+From the repository root, run:
+
+```bash
+python3 scripts/fill_acord125.py \
+  --csv sample_inputs/applied_epic_ams_export.csv \
+  --account-id ACME-001 \
+  --out outputs/demo
+```
+
+To process every account in the CSV, omit `--account-id`:
+
+```bash
+python3 scripts/fill_acord125.py \
+  --csv sample_inputs/applied_epic_ams_export.csv \
+  --out outputs/demo
+```
+
+## Outputs
+
+For each account, the script writes:
+
+- `*_application_draft.pdf`: filled ACORD 125-style draft application
+- `*_review_report.md`: missing-field report for CSR/producer review
+
+## Operating Rules
+
+- Do not infer missing account facts.
+- Do not mark an application ready if any blocking field is missing.
+- Treat the PDF as a draft for human review.
+- If the CSV has unrecognized fields, preserve the existing workflow and only map fields explicitly supported by the script.
+
+## Future Hybrid Extension
+
+For unstructured artifacts such as declaration pages, current policy PDFs, or broker notes, Claude should extract facts into the same normalized field names used by the CSV before calling the Python script. The deterministic validation and rendering path should remain unchanged so output behavior stays testable and auditable.
