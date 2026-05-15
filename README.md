@@ -1,12 +1,21 @@
-# Accordingly
+# ACORDingly
+## Cooper AI Sales Engineer Demo
 
-Accordingly is a small deterministic Claude Skill MVP for a mid-market commercial P&C brokerage. It ingests an AMS-style CSV export for one or more accounts and produces one output package per account/carrier combination:
+ACORDingly is a small deterministic Claude Skill MVP for a mid-market commercial P&C brokerage. It ingests an AMS-style CSV export for one or more accounts and produces one output package per account/carrier combination:
 
 - a filled official ACORD 125 PDF when a template is supplied, otherwise an ACORD 125-style draft PDF
 - a markdown review report showing missing blocking and recommended fields
 - a JSON payload that can feed a production official-form renderer
 
 The goal is not to replace producer/CSR review. The goal is to remove the first pass of repetitive re-keying and make the review work explicit.
+
+## Suggested Demo Flow
+
+1. Run the Acme Mechanical example to show a complete draft package.
+2. Open the generated carrier-specific folder and show the filled PDF, review report, and JSON payload.
+3. Run the Birchwood Hospitality example to show how the skill handles missing blocking data.
+4. Open Birchwood's review report and point out that the form is generated, but the package is not marked ready because FEIN is missing.
+5. If an official ACORD template is available locally, rerun Acme with `--template` to show the same normalized payload filling a real AcroForm PDF.
 
 ## Demo Command
 
@@ -31,6 +40,8 @@ python3 scripts/fill_acord125.py \
   --input-dir sample_inputs/birchwood_hospitality \
   --out outputs/demo
 ```
+
+The Birchwood sample intentionally omits FEIN to demonstrate how the skill flags blocking missing fields while still generating a draft package for review.
 
 If you have a fillable ACORD 125 PDF template locally, generate official filled drafts as well:
 
@@ -61,6 +72,8 @@ python3 scripts/fill_acord125.py \
 ## What I Chose To Build
 
 I built the narrow deterministic version of the skill:
+
+I intentionally optimized for one complete, inspectable workflow rather than broad form coverage. The MVP proves the highest-risk path: structured account data can be transformed into a reviewable submission package and, when an official AcroForm template is available, into a real filled ACORD PDF.
 
 ```text
 AMS CSV export
