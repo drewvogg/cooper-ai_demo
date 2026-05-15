@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
@@ -50,6 +51,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+
+# Generated demo artifacts
+outputs/*
+!outputs/.gitkeep
 
 # Translations
 *.mo
