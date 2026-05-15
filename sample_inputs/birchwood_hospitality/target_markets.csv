@@ -1,3 +1,3 @@
-target_market_id,carrier_name,carrier_naic_code,program_name,program_code,underwriter_name,underwriter_office
-HART-HOTEL,The Hartford,19682,Hotel and Motel Package,HMP-125,Nina Shah,Central Region
-AMWINS-HOSP,AmWINS Program Underwriters,12500,Hospitality Package Submission,HOSP-SUPP,Daniel Price,Specialty Programs
+target_market_id,carrier_name,carrier_naic_code,program_name,program_code,underwriter_name,underwriter_office,market_notes
+HART-HOTEL,The Hartford,19682,Hotel and Motel Package,HMP-125,Nina Shah,Central Region,Primary hotel/motel package market.
+AMWINS-HOSP,AmWINS Program Underwriters,12500,Hospitality Package Submission,HOSP-SUPP,Daniel Price,Specialty Programs,Wholesale program market for hospitality risks.

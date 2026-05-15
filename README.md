@@ -162,7 +162,7 @@ Add adapters in front of the same normalized schema:
 
 ## Where I Used AI
 
-I used AI to understand the assignment, research insurance workflow terminology, scope the MVP, generate realistic sample data, and accelerate implementation. I intentionally did not use AI for deterministic CSV parsing or final document rendering because those steps should be controlled, testable, and easy to audit.
+I used AI heavily to scope the workflow, generate realistic sample data, inspect ACORD field behavior, and accelerate implementation. I intentionally did not use runtime AI for CSV parsing or final form rendering because those steps should be deterministic, testable, and auditable. In a production Cooper workflow, the next AI layer would extract structured facts from declaration pages, policies, emails, and broker notes into the same normalized schema used here.
 
 ## What I Would Build Next
 

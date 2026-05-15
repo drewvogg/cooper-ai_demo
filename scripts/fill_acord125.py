@@ -58,6 +58,7 @@ RECOMMENDED_FIELDS = {
     "property_limit": "Property limit",
     "business_auto_limit": "Business auto limit",
     "workers_comp_estimated_payroll": "Workers comp estimated payroll",
+    "workers_comp_premium": "Workers compensation premium",
     "umbrella_limit": "Umbrella limit",
 }
 
@@ -66,6 +67,7 @@ LINE_FIELD_TRIGGERS = {
     "property_limit": ("property",),
     "business_auto_limit": ("business auto", "commercial auto"),
     "workers_comp_estimated_payroll": ("workers compensation", "workers comp"),
+    "workers_comp_premium": ("workers compensation", "workers comp"),
     "umbrella_limit": ("umbrella",),
 }
 
@@ -91,12 +93,14 @@ COVERAGE_FIELDS = [
 
 OPTIONAL_FIELDS = {
     "dba": "DBA",
+    "llc_member_manager_count": "LLC member / manager count",
     "website": "Website",
     "transaction_type": "Transaction type",
     "requested_expiration_date": "Requested expiration date",
     "business_type": "Business type",
     "operations_description": "Operations description",
     "primary_contact_phone": "Insured primary contact phone",
+    "primary_contact_phone_type": "Insured primary contact phone type",
     "agency_name": "Agency",
     "agency_street": "Agency street",
     "agency_city": "Agency city",
@@ -114,6 +118,7 @@ OPTIONAL_FIELDS = {
     "underwriter_name": "Underwriter",
     "underwriter_office": "Underwriter office",
     "target_market_id": "Target market ID",
+    "market_notes": "Target market notes",
     "general_liability_premium": "General liability premium",
     "property_premium": "Property premium",
     "business_auto_premium": "Business auto premium",
@@ -130,6 +135,9 @@ ACROFORM_FIELD_TARGETS = {
     ],
     "target_market_id": ["F[0].P1[0].Insurer_ProducerIdentifier_A[0]"],
     "named_insured": ["F[0].P1[0].NamedInsured_FullName_A[0]"],
+    "llc_member_manager_count": [
+        "F[0].P1[0].NamedInsured_LegalEntity_MemberManagerCount_A[0]"
+    ],
     "fein": ["F[0].P1[0].NamedInsured_TaxIdentifier_A[0]"],
     "naics": ["F[0].P1[0].NamedInsured_NAICSCode_A[0]"],
     "mailing_street": ["F[0].P1[0].NamedInsured_MailingAddress_LineOne_A[0]"],
@@ -177,6 +185,9 @@ ACROFORM_FIELD_TARGETS = {
     "business_auto_premium": [
         "F[0].P1[0].CommercialVehicleLineOfBusiness_PremiumAmount_A[0]"
     ],
+    "workers_comp_premium": [
+        "F[0].P1[0].Policy_SectionAttached_OtherPremiumAmount_A[0]"
+    ],
     "umbrella_premium": [
         "F[0].P1[0].CommercialUmbrellaLineOfBusiness_PremiumAmount_A[0]"
     ],
@@ -206,28 +217,42 @@ BUSINESS_TYPE_TARGETS = {
     "manufacturing": "F[0].P2[0].BusinessInformation_BusinessType_ManufacturingIndicator_A[0]",
 }
 
+CONTACT_PHONE_TYPE_TARGETS = {
+    "business": "F[0].P2[0].NamedInsured_Contact_PrimaryBusinessPhoneIndicator_A[0]",
+    "bus": "F[0].P2[0].NamedInsured_Contact_PrimaryBusinessPhoneIndicator_A[0]",
+    "cell": "F[0].P2[0].NamedInsured_Contact_PrimaryCellPhoneIndicator_A[0]",
+    "mobile": "F[0].P2[0].NamedInsured_Contact_PrimaryCellPhoneIndicator_A[0]",
+    "home": "F[0].P2[0].NamedInsured_Contact_PrimaryHomePhoneIndicator_A[0]",
+}
+
 
 @dataclass(frozen=True)
 class ReviewIssue:
+    """A missing or incomplete field that should be shown to the reviewer."""
+
     field: str
     label: str
     severity: str
 
 
 def clean(value: str | None) -> str:
+    """Normalize nullable CSV values before validation or rendering."""
     return (value or "").strip()
 
 
 def slugify(value: str) -> str:
+    """Create stable folder names for generated account/carrier packages."""
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
     return slug or "account"
 
 
 def normalize_row(row: dict[str, str]) -> dict[str, str]:
+    """Strip CSV header and value whitespace for one input row."""
     return {key.strip(): clean(value) for key, value in row.items()}
 
 
 def read_accounts(csv_path: Path) -> list[dict[str, str]]:
+    """Load account rows from the AMS export CSV."""
     with csv_path.open(newline="", encoding="utf-8-sig") as file:
         rows = [normalize_row(row) for row in csv.DictReader(file)]
     if not rows:
@@ -236,6 +261,7 @@ def read_accounts(csv_path: Path) -> list[dict[str, str]]:
 
 
 def read_markets(markets_path: Path | None) -> list[dict[str, str]]:
+    """Load optional carrier/program target rows."""
     if not markets_path:
         return []
     with markets_path.open(newline="", encoding="utf-8-sig") as file:
@@ -248,6 +274,7 @@ def read_markets(markets_path: Path | None) -> list[dict[str, str]]:
 def select_accounts(
     accounts: Iterable[dict[str, str]], account_id: str | None
 ) -> list[dict[str, str]]:
+    """Apply the optional account-id filter from the CLI."""
     selected = [
         account
         for account in accounts
@@ -261,6 +288,7 @@ def select_accounts(
 def account_market_variants(
     account: dict[str, str], markets: list[dict[str, str]]
 ) -> list[dict[str, str]]:
+    """Merge one account with each target market for carrier-specific outputs."""
     if not markets:
         return [account]
     variants = []
@@ -272,6 +300,7 @@ def account_market_variants(
 
 
 def validate_account(account: dict[str, str]) -> list[ReviewIssue]:
+    """Return blocking and recommended gaps for the reviewer."""
     issues: list[ReviewIssue] = []
     for field, label in BLOCKING_FIELDS.items():
         if not clean(account.get(field)):
@@ -283,6 +312,7 @@ def validate_account(account: dict[str, str]) -> list[ReviewIssue]:
 
 
 def is_recommended_field_applicable(account: dict[str, str], field: str) -> bool:
+    """Skip line-specific recommendations when that line was not requested."""
     triggers = LINE_FIELD_TRIGGERS.get(field)
     if not triggers:
         return True
@@ -291,6 +321,7 @@ def is_recommended_field_applicable(account: dict[str, str], field: str) -> bool
 
 
 def format_address(account: dict[str, str], prefix: str) -> str:
+    """Build a two-line address from prefixed CSV columns."""
     street = clean(account.get(f"{prefix}_street"))
     city = clean(account.get(f"{prefix}_city"))
     state = clean(account.get(f"{prefix}_state"))
@@ -302,6 +333,7 @@ def format_address(account: dict[str, str], prefix: str) -> str:
 
 
 def format_pdf_date(value: str) -> str:
+    """Convert supported input date formats to ACORD's MM/DD/YYYY style."""
     for date_format in ("%Y-%m-%d", "%m/%d/%Y"):
         try:
             return datetime.strptime(value, date_format).strftime("%m/%d/%Y")
@@ -311,14 +343,17 @@ def format_pdf_date(value: str) -> str:
 
 
 def truncate(value: str, max_length: int) -> str:
+    """Trim long values before placing them into small AcroForm fields."""
     return value if len(value) <= max_length else value[: max_length - 3].rstrip() + "..."
 
 
 def value(account: dict[str, str], field: str) -> str:
+    """Read a display value and mark missing data visibly."""
     return clean(account.get(field)) or "MISSING"
 
 
 def paragraph(text: str, style: ParagraphStyle) -> Paragraph:
+    """Create a safe ReportLab paragraph from plain text."""
     return Paragraph(html.escape(text).replace("\n", "<br/>"), style)
 
 
@@ -327,6 +362,7 @@ def build_key_value_table(
     rows: list[tuple[str, str]],
     body_style: ParagraphStyle,
 ) -> Table:
+    """Render labeled account fields as a simple PDF table."""
     table_data = [
         [paragraph(label, body_style), paragraph(value(account, field), body_style)]
         for field, label in rows
@@ -349,10 +385,12 @@ def build_key_value_table(
 
 
 def build_section_heading(text: str, styles) -> Paragraph:
+    """Create a consistent section heading for the fallback draft PDF."""
     return Paragraph(text, styles["section"])
 
 
 def build_target_market_section(account: dict[str, str], styles) -> list:
+    """Build the fallback PDF section for carrier/program metadata."""
     market_fields = [
         "target_market_id",
         "carrier_name",
@@ -361,6 +399,7 @@ def build_target_market_section(account: dict[str, str], styles) -> list:
         "program_code",
         "underwriter_name",
         "underwriter_office",
+        "market_notes",
     ]
     if not any(clean(account.get(field)) for field in market_fields):
         return []
@@ -376,6 +415,7 @@ def build_target_market_section(account: dict[str, str], styles) -> list:
                 ("program_code", "Program Code"),
                 ("underwriter_name", "Underwriter"),
                 ("underwriter_office", "Underwriter Office"),
+                ("market_notes", "Market Notes"),
             ],
             styles["BodyText"],
         ),
@@ -388,6 +428,7 @@ def generate_pdf(
     output_path: Path,
     generated_at: datetime,
 ) -> None:
+    """Generate the fallback ACORD-style PDF when no official template is used."""
     styles = getSampleStyleSheet()
     styles.add(
         ParagraphStyle(
@@ -530,6 +571,7 @@ def generate_pdf(
 
 
 def write_review_report(account: dict[str, str], issues: list[ReviewIssue], output_path: Path) -> None:
+    """Write the CSR-facing checklist for one account/carrier package."""
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     recommended = [issue for issue in issues if issue.severity == "recommended"]
     status = "Needs CSR review" if blocking else "Ready for review"
@@ -540,9 +582,16 @@ def write_review_report(account: dict[str, str], issues: list[ReviewIssue], outp
         f"- Account ID: `{value(account, 'account_id')}`",
         f"- Status: **{status}**",
         "- Source: AMS CSV export",
-        "",
-        "## Blocking Missing Fields",
     ]
+    if clean(account.get("target_market_id")):
+        lines.append(f"- Target Market: `{clean(account.get('target_market_id'))}`")
+    if clean(account.get("carrier_name")):
+        lines.append(f"- Carrier: {clean(account.get('carrier_name'))}")
+    if clean(account.get("program_name")):
+        lines.append(f"- Program: {clean(account.get('program_name'))}")
+    if clean(account.get("market_notes")):
+        lines.append(f"- Market Notes: {clean(account.get('market_notes'))}")
+    lines.extend(["", "## Blocking Missing Fields"])
     lines.extend(format_issue_lines(blocking))
     lines.extend(["", "## Recommended Missing Fields"])
     lines.extend(format_issue_lines(recommended))
@@ -558,12 +607,14 @@ def write_review_report(account: dict[str, str], issues: list[ReviewIssue], outp
 
 
 def format_issue_lines(issues: list[ReviewIssue]) -> list[str]:
+    """Format missing-field lists for the markdown report."""
     if not issues:
         return ["- None"]
     return [f"- {issue.label} (`{issue.field}`)" for issue in issues]
 
 
 def required_level(field: str) -> str:
+    """Expose each normalized field's validation level in the JSON payload."""
     if field in BLOCKING_FIELDS:
         return "blocking"
     if field in RECOMMENDED_FIELDS:
@@ -572,6 +623,7 @@ def required_level(field: str) -> str:
 
 
 def field_label(field: str) -> str:
+    """Return a human-readable label for a normalized schema key."""
     labels = {**BLOCKING_FIELDS, **RECOMMENDED_FIELDS, **OPTIONAL_FIELDS}
     return labels.get(field, field.replace("_", " ").title())
 
@@ -579,6 +631,7 @@ def field_label(field: str) -> str:
 def build_acroform_fields(
     account: dict[str, str], generated_at: datetime
 ) -> dict[str, str | bool]:
+    """Map normalized account fields onto official ACORD AcroForm names."""
     acroform_fields: dict[str, str | bool] = {}
     acroform_fields["F[0].P1[0].Form_CompletionDate_A[0]"] = generated_at.strftime(
         "%m/%d/%Y"
@@ -624,6 +677,11 @@ def build_acroform_fields(
                 "F[0].P2[0].BusinessInformation_BusinessType_OtherDescription_A[0]"
             ] = truncate(clean(account.get("business_type")), 40)
 
+    contact_phone_type = clean(account.get("primary_contact_phone_type")).lower()
+    contact_phone_type_target = CONTACT_PHONE_TYPE_TARGETS.get(contact_phone_type)
+    if contact_phone_type_target:
+        acroform_fields[contact_phone_type_target] = True
+
     requested_lines = clean(account.get("requested_lines")).lower()
     line_targets = {
         "general liability": "F[0].P1[0].Policy_LineOfBusiness_CommercialGeneralLiability_A[0]",
@@ -645,6 +703,10 @@ def build_acroform_fields(
         acroform_fields[
             "F[0].P1[0].CommercialPolicy_Attachment_StatementOfValuesIndicator_A[0]"
         ] = True
+    if "business auto" in requested_lines or "commercial auto" in requested_lines:
+        acroform_fields[
+            "F[0].P1[0].Policy_SectionAttached_VehicleScheduleIndicator_A[0]"
+        ] = True
     if business_type == "contractor":
         acroform_fields[
             "F[0].P1[0].CommercialPolicy_Attachment_ContractorsSupplementIndicator_A[0]"
@@ -658,6 +720,7 @@ def build_acroform_fields(
 
 
 def build_field_payload(account: dict[str, str]) -> list[dict[str, object]]:
+    """Build the normalized field list used by downstream integrations."""
     fields = sorted({*BLOCKING_FIELDS, *RECOMMENDED_FIELDS, *OPTIONAL_FIELDS})
     payload = []
     for field in fields:
@@ -688,6 +751,7 @@ def write_json_payload(
     output_path: Path,
     generated_at: datetime,
 ) -> None:
+    """Write the machine-readable payload for form filling and audit review."""
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     recommended = [issue for issue in issues if issue.severity == "recommended"]
     status = "needs_review" if blocking else "ready_for_review"
@@ -703,6 +767,9 @@ def write_json_payload(
             "source_file": source_csv.name,
             "account_id": value(account, "account_id"),
             "review_status": status,
+            "target_market_id": clean(account.get("target_market_id")) or None,
+            "carrier_name": clean(account.get("carrier_name")) or None,
+            "program_name": clean(account.get("program_name")) or None,
         },
         "normalized_account": account,
         "validation": {
@@ -721,6 +788,7 @@ def fill_official_acord_template(
     output_path: Path,
     generated_at: datetime,
 ) -> tuple[int, list[str]]:
+    """Fill the official ACORD template and report skipped candidate fields."""
     from pypdf import PdfReader, PdfWriter
     from pypdf.generic import BooleanObject, NameObject
 
@@ -740,10 +808,16 @@ def fill_official_acord_template(
     for page in writer.pages:
         writer.update_page_form_field_values(page, fillable_fields, auto_regenerate=True)
 
-    if "/AcroForm" in writer._root_object:
-        writer._root_object["/AcroForm"].update(
-            {NameObject("/NeedAppearances"): BooleanObject(True)}
-        )
+    try:
+        if "/AcroForm" in writer._root_object:
+            writer._root_object["/AcroForm"].update(
+                {NameObject("/NeedAppearances"): BooleanObject(True)}
+            )
+    except (AttributeError, KeyError, TypeError):
+        # pypdf's `_root_object` is a private attribute; if a future release
+        # renames or restructures it, skip the NeedAppearances flag instead of
+        # crashing. Most viewers still render filled fields without it.
+        pass
 
     with output_path.open("wb") as file:
         writer.write(file)
@@ -752,6 +826,7 @@ def fill_official_acord_template(
 
 
 def pdf_field_value(field_value: str | bool) -> str:
+    """Convert Python values to the strings expected by pypdf AcroForm writes."""
     if field_value is True:
         return "/1"
     if field_value is False:
@@ -760,10 +835,12 @@ def pdf_field_value(field_value: str | bool) -> str:
 
 
 def verification_targets(account: dict[str, str]) -> list[tuple[str, str]]:
+    """List high-value PDF fields to confirm after official template generation."""
     targets = [
         ("form completion date", "F[0].P1[0].Form_CompletionDate_A[0]"),
         ("website address", "F[0].P1[0].NamedInsured_Primary_WebsiteAddress_A[0]"),
         ("prior carrier", "F[0].P3[0].PriorCoverage_GeneralLiability_InsurerFullName_A[0]"),
+        ("customer ID page 1", "F[0].P1[0].Producer_CustomerIdentifier_A[0]"),
         ("customer ID page 2", "F[0].P2[0].Producer_CustomerIdentifier_A[0]"),
         ("customer ID page 3", "F[0].P3[0].Producer_CustomerIdentifier_A[0]"),
         ("customer ID page 4", "F[0].P4[0].Producer_CustomerIdentifier_A[0]"),
@@ -772,6 +849,19 @@ def verification_targets(account: dict[str, str]) -> list[tuple[str, str]]:
         ("policy expiration date", "F[0].P1[0].Policy_ExpirationDate_A[0]"),
         ("operations description", "F[0].P2[0].CommercialPolicy_OperationsDescription_A[0]"),
     ]
+
+    if clean(account.get("llc_member_manager_count")):
+        targets.append(
+            (
+                "LLC member / manager count",
+                "F[0].P1[0].NamedInsured_LegalEntity_MemberManagerCount_A[0]",
+            )
+        )
+
+    contact_phone_type = clean(account.get("primary_contact_phone_type")).lower()
+    contact_phone_type_target = CONTACT_PHONE_TYPE_TARGETS.get(contact_phone_type)
+    if contact_phone_type_target:
+        targets.append((f"{contact_phone_type} phone type", contact_phone_type_target))
 
     transaction_type = clean(account.get("transaction_type")).lower() or "quote"
     status_target = STATUS_FIELD_TARGETS.get(transaction_type)
@@ -788,6 +878,13 @@ def verification_targets(account: dict[str, str]) -> list[tuple[str, str]]:
             (
                 "statement of values attachment",
                 "F[0].P1[0].CommercialPolicy_Attachment_StatementOfValuesIndicator_A[0]",
+            )
+        )
+    if "business auto" in requested_lines or "commercial auto" in requested_lines:
+        targets.append(
+            (
+                "vehicle schedule attachment",
+                "F[0].P1[0].Policy_SectionAttached_VehicleScheduleIndicator_A[0]",
             )
         )
     if "umbrella" in requested_lines:
@@ -812,6 +909,11 @@ def verification_targets(account: dict[str, str]) -> list[tuple[str, str]]:
             "F[0].P1[0].CommercialVehicleLineOfBusiness_PremiumAmount_A[0]",
         ),
         (
+            "workers_comp_premium",
+            "workers compensation premium",
+            "F[0].P1[0].Policy_SectionAttached_OtherPremiumAmount_A[0]",
+        ),
+        (
             "umbrella_premium",
             "umbrella premium",
             "F[0].P1[0].CommercialUmbrellaLineOfBusiness_PremiumAmount_A[0]",
@@ -824,6 +926,7 @@ def verification_targets(account: dict[str, str]) -> list[tuple[str, str]]:
 
 
 def business_type_verification_targets(business_type: str) -> list[tuple[str, str]]:
+    """Return verification checks driven by business type mappings."""
     target = BUSINESS_TYPE_TARGETS.get(business_type)
     if target:
         targets = [(f"{business_type} business type", target)]
@@ -856,6 +959,7 @@ def business_type_verification_targets(business_type: str) -> list[tuple[str, st
 
 
 def print_official_pdf_verification(output_path: Path, account: dict[str, str]) -> None:
+    """Print a concise confirmation that expected fields landed in the PDF."""
     from pypdf import PdfReader
 
     fields = PdfReader(str(output_path)).get_fields() or {}
@@ -876,6 +980,7 @@ def print_official_pdf_verification(output_path: Path, account: dict[str, str]) 
 
 
 def resolve_input_paths(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """Resolve the folder convention or explicit CSV paths from CLI args."""
     if args.input_dir:
         csv_path = args.csv or args.input_dir / "ams_export.csv"
         default_markets_path = args.input_dir / "target_markets.csv"
@@ -901,6 +1006,7 @@ def process_account(
     output_dir: Path,
     template_path: Path | None,
 ) -> tuple[Path, Path | None, Path, Path, Path | None]:
+    """Generate all artifacts for one normalized account/carrier variant."""
     issues = validate_account(account)
     generated_at = datetime.now()
     market_slug = clean(account.get("target_market_id")) or clean(account.get("carrier_name"))
@@ -938,6 +1044,7 @@ def process_account(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for local runs or Claude Skill execution."""
     parser = argparse.ArgumentParser(
         description="Fill an ACORD 125-style commercial application draft from an AMS CSV export."
     )
@@ -962,6 +1069,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Run the full CSV-to-form workflow from the command line."""
     args = parse_args()
     if args.template and not args.template.exists():
         raise FileNotFoundError(f"Template not found: {args.template}")
