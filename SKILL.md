@@ -1,11 +1,11 @@
 ---
 name: ACORDingly
-description: Fill an ACORD 125 commercial application draft from structured AMS CSV exports.
+description: Fill an official ACORD 125 commercial application from structured AMS CSV exports.
 ---
 
 # ACORDingly
 
-Use this skill when a user uploads or points to an AMS-style CSV export for a commercial P&C account and asks for a filled insurance application draft. The repo includes sample inputs and the Python workflow. The official ACORD 125 PDF template is licensed and must be supplied separately, usually at `templates/Acord125_Template.pdf`.
+Use this skill when a user uploads or points to an AMS-style CSV export for a commercial P&C account and asks for a filled insurance application draft. The repo includes sample inputs and the Python workflow. The official ACORD 125 PDF template is licensed, required for PDF generation, and must be supplied separately, usually at `templates/Acord125_Template.pdf`.
 
 ## What This Skill Does
 
@@ -14,8 +14,8 @@ This MVP handles one deterministic path:
 1. Read a structured AMS CSV export.
 2. Select one account row or process every row.
 3. Validate required and recommended fields for an ACORD 125-style commercial application draft.
-4. Generate a filled PDF draft, a markdown review report, and a machine-readable JSON payload.
-5. Fill a locally supplied ACORD 125 AcroForm template when `--template` is supplied.
+4. Fill a locally supplied ACORD 125 AcroForm template.
+5. Generate a markdown review report and a machine-readable JSON payload.
 
 The generated application is a human-reviewable draft. It is not automatically submitted to a carrier or market.
 
@@ -23,7 +23,7 @@ The generated application is a human-reviewable draft. It is not automatically s
 
 Expected account CSV columns are shown in `sample_inputs/acme_mechanical/ams_export.csv`.
 Each example folder can also include `target_markets.csv` to generate carrier-specific ACORD copies.
-The official PDF template is not committed. Before running the official-template demo, place the licensed PDF at `templates/Acord125_Template.pdf` or use the uploaded file path in the `--template` argument.
+The official PDF template is not committed. Before running the demo, place the licensed PDF at `templates/Acord125_Template.pdf` or use the uploaded file path in the `--template` argument.
 
 The important fields include:
 
@@ -93,8 +93,7 @@ python3 scripts/fill_acord125.py \
 
 For each account/carrier combination, the script writes one folder named from the account and target market. The folder contains:
 
-- `official_acord125.pdf`: filled official ACORD 125 template when `--template` is supplied
-- `application_draft.pdf`: fallback ACORD 125-style draft application when no template is supplied
+- `official_acord125.pdf`: filled official ACORD 125 template
 - `review_report.md`: missing-field report for CSR/producer review
 - `form_payload.json`: normalized account data, validation state, and candidate AcroForm field values for a production PDF filler
 
